@@ -25,10 +25,7 @@ const replyMap = storage.getReplyMap();
 
 function buildReplyMenu() {
   return {
-    keyboard: [
-      [{ text: "Menu" }],
-      [{ text: "✍️ Send Message" }],
-    ],
+    keyboard: [[{ text: "✍️ Send Message" }]],
     resize_keyboard: true,
     one_time_keyboard: false,
     selective: true,
@@ -120,9 +117,7 @@ async function showMainMenu(ctx) {
     },
   );
 
-  await ctx.reply("Menu", {
-    reply_markup: buildReplyMenu(),
-  });
+
 }
 
 async function askForMessage(ctx, department) {
