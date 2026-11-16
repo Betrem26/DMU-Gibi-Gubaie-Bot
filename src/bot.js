@@ -330,7 +330,7 @@ async function handleStudentSubmission(ctx) {
     await ctx.reply(
       "🙏 ስለላኩልን ሃሳብ፣ ጥያቄ ወይም አስተያየት ከልብ እናመሰግናለን።\n\n" +
         "📩 መልዕክትዎ ለሚመለከተው ክፍል ደርሶልዎታል።\n\n" +
-        "ተገቢው ምላሽ በሚመለከተው ክፍል ተወካይ ይሰጣል።",
+        "ተገቢው ምላሽ በግቢ ጉባኤው በሚዘጋጅ ልዩ ጉባኤ ላይ ወይም ሌሎች መርሐ ግብራት ላይ ይሰጣል።",
     );
 
     console.log(`✅ Student message forwarded to ${sentCount} representative(s).`);
