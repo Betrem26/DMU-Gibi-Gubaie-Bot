@@ -166,6 +166,18 @@ function getDepartmentRepresentativeUsernames(departmentId) {
   return rows.map((row) => row.username).filter(Boolean);
 }
 
+function getRepresentativeChatsByUsernames(usernames) {
+  const normalized = Array.from(new Set((Array.isArray(usernames) ? usernames : []).map(normalizeUsername).filter(Boolean)));
+  if (!normalized.length) return [];
+
+  const placeholders = normalized.map(() => "?").join(", ");
+  const rows = db
+    .prepare(`SELECT DISTINCT chat_id FROM representatives WHERE lower(username) IN (${placeholders})`)
+    .all(...normalized);
+
+  return rows.map((row) => Number(row.chat_id)).filter((value) => Number.isFinite(value));
+}
+
 function getRegisteredDepartments() {
   return db
     .prepare(`SELECT DISTINCT department_id FROM department_representatives ORDER BY department_id ASC`)
@@ -321,6 +333,7 @@ module.exports = {
   assignDepartmentRepresentative,
   getDepartmentRepresentativeChats,
   getDepartmentRepresentativeUsernames,
+  getRepresentativeChatsByUsernames,
   getRegisteredDepartments,
   recordForwardedMessage,
   getMessageByForwardedMessageId,

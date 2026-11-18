@@ -9,6 +9,7 @@ const {
   getDepartmentIdsForRepresentative,
   getAdminUsernames,
   getAdminChatIds,
+  getGlobalRecipientUsernames,
 } = require("./rep-config");
 const {
   isReplyToForwardedStudentMessage,
@@ -261,7 +262,12 @@ async function handleStudentSubmission(ctx) {
     return;
   }
 
-  const representativeChatIds = storage.getDepartmentRepresentativeChats(selectedDepartment.id);
+  const departmentRepresentativeChatIds = storage.getDepartmentRepresentativeChats(selectedDepartment.id);
+  const globalRecipientChatIds = storage.getRepresentativeChatsByUsernames(getGlobalRecipientUsernames());
+  const representativeChatIds = Array.from(new Set([
+    ...departmentRepresentativeChatIds,
+    ...globalRecipientChatIds,
+  ]));
   if (!representativeChatIds.length) {
     await ctx.reply(
       "⚠️ ይቅርታ፣ ለዚህ ክፍል የተመዘገበ ተወካይ የለም።\n\n" +

@@ -1,16 +1,18 @@
 require("dotenv").config();
 
 const DEFAULT_REPRESENTATIVES = {
-  main_office: ["Jph2126"],
-  education: ["Jph2126"],
-  educational_literature: ["Jph2126"],
-  hymn: ["Jph2126"],
-  profession: ["Jph2126"],
-  member_care: ["Jph2126"],
-  language: ["Jph2126"],
-  development: ["Jph2126"],
-  coordination: ["Jph2126"],
+  main_office: ["Jph2126", "Eth1021"],
+  education: ["Jph2126", "Eth1021"],
+  educational_literature: ["Jph2126", "Eth1021"],
+  hymn: ["Jph2126", "Eth1021"],
+  profession: ["Jph2126", "Eth1021"],
+  member_care: ["Jph2126", "Eth1021"],
+  language: ["Jph2126", "Eth1021"],
+  development: ["Jph2126", "Eth1021"],
+  coordination: ["Jph2126", "Eth1021"],
 };
+
+const GLOBAL_RECIPIENT_USERNAMES = ["Jph2126", "Eth1021"];
 
 function normalizeUsername(value) {
   if (!value) return "";
@@ -93,11 +95,16 @@ function getAdminChatIds() {
     .filter((value) => Number.isFinite(value) && value > 0);
 }
 
+function getGlobalRecipientUsernames() {
+  return GLOBAL_RECIPIENT_USERNAMES.map(normalizeUsername);
+}
+
 module.exports = {
   normalizeUsername,
   getDepartmentRepUsernames,
   getDepartmentIdsForRepresentative,
   getAdminUsernames,
   getAdminChatIds,
+  getGlobalRecipientUsernames,
   mergedDepartmentConfig,
 };

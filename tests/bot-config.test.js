@@ -7,6 +7,7 @@ const {
   getDepartmentIdsForRepresentative,
   getAdminUsernames,
   getAdminChatIds,
+  getGlobalRecipientUsernames,
 } = require("../src/rep-config");
 
 const storage = require("../src/storage");
@@ -18,7 +19,7 @@ test("normalizeUsername strips @ and lowercases names", () => {
 
 test("department representative config returns configured users", () => {
   process.env.TEST_REP_USERNAME = "Jph2126";
-  assert.deepEqual(getDepartmentRepUsernames("main_office"), ["jph2126"]);
+  assert.deepEqual(getDepartmentRepUsernames("main_office"), ["jph2126", "eth1021"]);
 });
 
 test("department lookup finds all configured departments for a username", () => {
@@ -77,4 +78,8 @@ test("storage can attach a department to a representative", () => {
 
   const chats = storage.getDepartmentRepresentativeChats("main_office");
   assert.ok(chats.includes(555000));
+});
+
+test("global recipients include owner and legacy account", () => {
+  assert.deepEqual(getGlobalRecipientUsernames(), ["jph2126", "eth1021"]);
 });
