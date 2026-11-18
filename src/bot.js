@@ -122,12 +122,16 @@ async function showMainMenu(ctx) {
 }
 
 async function askForMessage(ctx, department) {
-  userSelections.set(ctx.from.id, department);
+  userSelections.set(ctx.from.id, { department, anonymous: false });
 
   await ctx.reply(
-    `📂 የመረጡት ክፍል፦ ${department.name}\n\n` +
-      "✍️ እባክዎ ሃሳብዎን፣ ጥያቄዎን ወይም አስተያየትዎን አሁን ይጻፉ።\n\n" +
-      "❌ ለመሰረዝ /cancel ይጻፉ።",
+    `📂 የመረጡት ክፍል፦ ${department.name}\n\nመልዕክትዎን እንዴት መላክ ይፈልጋሉ?`,
+    Markup.inlineKeyboard([
+      [
+        Markup.button.callback("✍️ በስሜ ላክ", "anon_no"),
+        Markup.button.callback("🎭 በስም አልባ ላክ", "anon_yes"),
+      ],
+    ]),
   );
 }
 
@@ -172,14 +176,21 @@ function getMessageType(message) {
   return "unsupported";
 }
 
-function buildStudentForwardMessage({ department, studentName, studentUsername, senderId, messageType, messageText }) {
-  const base =
+function buildStudentForwardMessage({ department, studentName, studentUsername, senderId, messageType, messageText, anonymous }) {
+  const displayName = anonymous ? "익명 / በስም አልባ" : (studentName || "ያልታወቀ");
+  const displayUsername = anonymous ? "익명 / በስም አልባ" : studentUsername;
+
+  let base =
     "📨 አዲስ የተማሪ መልዕክት\n\n" +
     `📂 ክፍል፦ ${department.name}\n` +
-    `👤 ስም፦ ${studentName || "ያልታወቀ"}\n` +
-    `🔗 Username፦ ${studentUsername}\n` +
-    `🆔 Telegram ID፦ ${senderId}\n\n` +
-    `📎 የመልዕክት አይነት፦ ${messageType}\n\n`;
+    `👤 ስም፦ ${displayName}\n` +
+    `🔗 Username፦ ${displayUsername}\n`;
+
+  if (!anonymous) {
+    base += `🆔 Telegram ID፦ ${senderId}\n`;
+  }
+
+  base += `\n📎 የመልዕክት አይነት፦ ${messageType}\n\n`;
 
   if (messageText) {
     return `${base}💬 መልዕክት፦\n${messageText}\n\n↩️ ለተማሪው በቀጥታ ለመመለስ፦\nበዚህ መልዕክት ላይ Reply / መልስ ይምረጡ።`;
@@ -250,12 +261,14 @@ async function handleStudentSubmission(ctx) {
     return;
   }
 
-  const selectedDepartment = userSelections.get(senderId);
-  if (!selectedDepartment) {
+  const selection = userSelections.get(senderId);
+  if (!selection) {
     await ctx.reply("ℹ️ መጀመሪያ ክፍል ይምረጡ።");
     await showMainMenu(ctx);
     return;
   }
+
+  const { department: selectedDepartment, anonymous = false } = selection;
 
   if (!getStatusForMediaType(messageType)) {
     await ctx.reply("⚠️ ይህ አይነት መልዕክት አሁን አይደገፍም።\n\nእባክዎ ጽሑፍ፣ ፎቶ፣ ሰነድ ወይም ድምፅ ይምረጡ።");
@@ -271,7 +284,7 @@ async function handleStudentSubmission(ctx) {
   if (!representativeChatIds.length) {
     await ctx.reply(
       "⚠️ ይቅርታ፣ ለዚህ ክፍል የተመዘገበ ተወካይ የለም።\n\n" +
-        "እባክዎ ተወካይ እንዲተካ የአስተዳደር ማቀናበሪያውን ያስፈልጋል።",
+        "እባክዎ ተወካይ እንዲተካ ለአስተዳደር አቅናባሪው ያመልክቱ።",
     );
     return;
   }
@@ -287,6 +300,7 @@ async function handleStudentSubmission(ctx) {
     senderId,
     messageType,
     messageText: textContent,
+    anonymous,
   });
 
   let sentCount = 0;
@@ -345,6 +359,13 @@ bot.telegram.setMyCommands([
   { command: "start", description: "Start the bot" },
   { command: "menu", description: "Open the main menu" },
   { command: "cancel", description: "Cancel the current submission" },
+  { command: "admin", description: "Admin panel" },
+  { command: "stats", description: "Message statistics" },
+  { command: "list_reps", description: "List representatives" },
+  { command: "assign_rep", description: "Assign a representative" },
+  { command: "list_departments", description: "List department IDs" },
+  { command: "remove_rep", description: "Remove a representative assignment" },
+  { command: "broadcast", description: "Broadcast a message to all students" },
 ]);
 
 bot.command("menu", async (ctx) => {
@@ -377,7 +398,10 @@ bot.command("admin", async (ctx) => {
     "🛠️ አስተዳደር መሳሪያዎች\n\n" +
       "/stats - አጠቃላይ የመልዕክት ሁኔታ\n" +
       "/list_reps - ተወካዮች\n" +
-      "/assign_rep <department_id> <username> - ተወካይ መመደብ\n\n" +
+      "/assign_rep <department_id> <username> - ተወካይ መመደብ\n" +
+      "/remove_rep <department_id> <username> - ተወካይ ማስወገድ\n" +
+      "/list_departments - የክፍሎች መታወቂያ ዝርዝር\n" +
+      "/broadcast <message> - ለሁሉም ተማሪዎች ማስታወቂያ ላክ\n\n" +
       `📊 ድምር: ${stats.total}\n` +
       `✅ የተመለሰ: ${stats.answered}\n` +
       `⏳ ቀርቷል: ${stats.pending}\n\n` +
@@ -440,6 +464,81 @@ bot.command("assign_rep", async (ctx) => {
   });
 
   await ctx.reply(`✅ ${normalizedUsername} ወደ ${departmentId} ተመድቧል።`);
+});
+
+bot.command("list_departments", async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    return ctx.reply("⚠️ እርስዎ አስተዳዳሪ አይደሉም።");
+  }
+
+  const lines = ["📋 የክፍሎች ዝርዝር\n"];
+  for (const dept of departments) {
+    lines.push(`🔑 ${dept.id} — ${dept.name}`);
+    if (dept.subDepartments) {
+      for (const sub of dept.subDepartments) {
+        lines.push(`🔑 ${sub.id} — ${sub.name}`);
+      }
+    }
+  }
+
+  await ctx.reply(lines.join("\n"));
+});
+
+bot.command("remove_rep", async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    return ctx.reply("⚠️ እርስዎ አስተዳዳሪ አይደሉም።");
+  }
+
+  const args = (ctx.message.text || "").split(/\s+/).slice(1);
+  if (args.length < 2) {
+    return ctx.reply("⚠️ አጠቃቀም: /remove_rep <department_id> <username>");
+  }
+
+  const [departmentId, rawUsername] = args;
+  const username = normalizeUsername(rawUsername);
+
+  if (!username) {
+    return ctx.reply("❌ ትክክለኛ የተወካይ ስም ያስፈልጋል።");
+  }
+
+  const info = storage.removeDepartmentRepresentative({ departmentId, username });
+
+  if (info.changes > 0) {
+    await ctx.reply(`✅ ${username} ከ${departmentId} ተወካይነት ተወግዷል።`);
+  } else {
+    await ctx.reply("⚠️ ያቀረቡት ተወካይ ወይም ክፍል አልተገኘም።");
+  }
+});
+
+bot.command("broadcast", async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    return ctx.reply("⚠️ እርስዎ አስተዳዳሪ አይደሉም።");
+  }
+
+  const fullText = ctx.message.text || "";
+  const broadcastBody = fullText.replace(/^\/broadcast\s*/, "").trim();
+
+  if (!broadcastBody) {
+    return ctx.reply("⚠️ አጠቃቀም: /broadcast <መልዕክት>");
+  }
+
+  const broadcastText = `📢 ከደ/ማ/ዩ ግቢ ጉባኤ ማስታወቂያ\n\n${broadcastBody}`;
+  const chatIds = storage.getUniqueStudentChatIds();
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const chatId of chatIds) {
+    try {
+      await ctx.telegram.sendMessage(chatId, broadcastText);
+      successCount += 1;
+    } catch (err) {
+      console.error(`Broadcast failed for chatId ${chatId}:`, err.description || err.message);
+      failCount += 1;
+    }
+  }
+
+  await ctx.reply(`✅ ማስታወቂያ ተልኳል። ደርሷቸዋል: ${successCount} | አልደረሰም: ${failCount}`);
 });
 
 bot.command("stats", async (ctx) => {
@@ -536,6 +635,31 @@ bot.action(/^subdept_(.+)$/, async (ctx) => {
     id: result.subDepartment.id,
     name: result.subDepartment.name,
   });
+});
+
+bot.action("anon_no", async (ctx) => {
+  await ctx.answerCbQuery();
+  const selection = userSelections.get(ctx.from.id);
+  if (!selection) return ctx.reply("ℹ️ መጀመሪያ ክፍል ይምረጡ።");
+  userSelections.set(ctx.from.id, { department: selection.department, anonymous: false });
+  await ctx.reply(
+    `📂 የመረጡት ክፍል፦ ${selection.department.name}\n\n` +
+      "✍️ እባክዎ ሃሳብዎን፣ ጥያቄዎን ወይም አስተያየትዎን አሁን ይጻፉ።\n\n" +
+      "❌ ለመሰረዝ /cancel ይጻፉ።",
+  );
+});
+
+bot.action("anon_yes", async (ctx) => {
+  await ctx.answerCbQuery();
+  const selection = userSelections.get(ctx.from.id);
+  if (!selection) return ctx.reply("ℹ️ መጀመሪያ ክፍል ይምረጡ።");
+  userSelections.set(ctx.from.id, { department: selection.department, anonymous: true });
+  await ctx.reply(
+    `📂 የመረጡት ክፍል፦ ${selection.department.name}\n\n` +
+      "🎭 መልዕክትዎ በስም አልባ ይላካል።\n\n" +
+      "✍️ እባክዎ ሃሳብዎን፣ ጥያቄዎን ወይም አስተያየትዎን አሁን ይጻፉ።\n\n" +
+      "❌ ለመሰረዝ /cancel ይጻፉ።",
+  );
 });
 
 bot.action("back_main", async (ctx) => {

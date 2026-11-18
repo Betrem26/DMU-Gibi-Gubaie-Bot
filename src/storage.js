@@ -322,6 +322,20 @@ function getStats() {
   };
 }
 
+function removeDepartmentRepresentative({ departmentId, username }) {
+  const normalized = normalizeUsername(username);
+  return db
+    .prepare(`DELETE FROM department_representatives WHERE department_id = ? AND username = ?`)
+    .run(departmentId, normalized);
+}
+
+function getUniqueStudentChatIds() {
+  const rows = db
+    .prepare(`SELECT DISTINCT student_chat_id FROM messages ORDER BY student_chat_id ASC`)
+    .all();
+  return rows.map((row) => Number(row.student_chat_id)).filter((v) => Number.isFinite(v));
+}
+
 module.exports = {
   db,
   normalizeUsername,
@@ -340,4 +354,6 @@ module.exports = {
   updateReplyStatus,
   getReplyMap,
   getStats,
+  removeDepartmentRepresentative,
+  getUniqueStudentChatIds,
 };
