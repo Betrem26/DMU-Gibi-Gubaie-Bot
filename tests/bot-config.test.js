@@ -12,23 +12,23 @@ const {
 const storage = require("../src/storage");
 
 test("normalizeUsername strips @ and lowercases names", () => {
-  assert.equal(normalizeUsername("@Eth1021"), "eth1021");
+  assert.equal(normalizeUsername("@Jph2126"), "jph2126");
   assert.equal(normalizeUsername("  ADMIN  "), "admin");
 });
 
 test("department representative config returns configured users", () => {
-  process.env.TEST_REP_USERNAME = "Eth1021";
-  assert.deepEqual(getDepartmentRepUsernames("main_office"), ["eth1021"]);
+  process.env.TEST_REP_USERNAME = "Jph2126";
+  assert.deepEqual(getDepartmentRepUsernames("main_office"), ["jph2126"]);
 });
 
 test("department lookup finds all configured departments for a username", () => {
   process.env.DEPARTMENT_REPRESENTATIVES = JSON.stringify({
-    main_office: ["Eth1021"],
-    education: ["rep1", "Eth1021"],
+    main_office: ["Jph2126"],
+    education: ["rep1", "Jph2126"],
   });
 
   assert.deepEqual(
-    getDepartmentIdsForRepresentative("eth1021").sort(),
+    getDepartmentIdsForRepresentative("jph2126").sort(),
     [
       "coordination",
       "development",
@@ -47,7 +47,7 @@ test("admin usernames and chat IDs are parsed safely", () => {
   process.env.ADMIN_USERNAMES = "Admin1, admin2";
   process.env.ADMIN_IDS = "1001, 2002";
 
-  assert.deepEqual(getAdminUsernames(), ["admin1", "admin2"]);
+  assert.deepEqual(getAdminUsernames(), ["jph2126", "admin1", "admin2"]);
   assert.deepEqual(getAdminChatIds(), [1001, 2002]);
 });
 

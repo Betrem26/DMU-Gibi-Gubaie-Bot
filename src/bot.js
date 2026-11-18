@@ -325,7 +325,7 @@ async function handleStudentSubmission(ctx) {
     await ctx.reply(
       "🙏 ስለላኩልን ሃሳብ፣ ጥያቄ ወይም አስተያየት ከልብ እናመሰግናለን።\n\n" +
         "📩 መልዕክትዎ ለሚመለከተው ክፍል ደርሶልዎታል።\n\n" +
-        "ተገቢው ምላሽ በግቢ ጉባኤው በሚዘጋጅ ልዩ ጉባኤ ላይ ወይም ሌሎች መርሐ ግብራት ላይ ይሰጣል።",
+        "በግቢ ጉባኤው በሚዘጋጅ ልዩ ጉባኤ ላይ ወይም ሌሎች መርሐ ግብራት ላይ  ተገቢው ምላሽ ይሰጣል። ስለሚሰጡን አስተያየት በእግዚአብሔር እናመሰግናለን። 🙏",
     );
 
     console.log(`✅ Student message forwarded to ${sentCount} representative(s).`);
@@ -339,7 +339,6 @@ bot.telegram.setMyCommands([
   { command: "start", description: "Start the bot" },
   { command: "menu", description: "Open the main menu" },
   { command: "cancel", description: "Cancel the current submission" },
-  { command: "admin", description: "Open admin tools" },
 ]);
 
 bot.command("menu", async (ctx) => {
@@ -507,7 +506,7 @@ bot.action(/^dept_(.+)$/, async (ctx) => {
       Markup.button.callback(subDepartment.name, `subdept_${subDepartment.id}`),
     ]);
 
-    buttons.push([Markup.button.callback("⬅️ ወደ ዋናው ምናሌ", "back_main")]);
+    buttons.push([Markup.button.callback("⬅️ ወደ ዋናው ክፍል ይግቡ ", "back_main")]);
 
     return ctx.reply(
       `📚 ${department.name}\n\n` + "እባክዎ ንዑስ ክፍሉን ይምረጡ።",

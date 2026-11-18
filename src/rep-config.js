@@ -1,15 +1,15 @@
 require("dotenv").config();
 
 const DEFAULT_REPRESENTATIVES = {
-  main_office: ["Eth1021"],
-  education: ["Eth1021"],
-  educational_literature: ["Eth1021"],
-  hymn: ["Eth1021"],
-  profession: ["Eth1021"],
-  member_care: ["Eth1021"],
-  language: ["Eth1021"],
-  development: ["Eth1021"],
-  coordination: ["Eth1021"],
+  main_office: ["Jph2126"],
+  education: ["Jph2126"],
+  educational_literature: ["Jph2126"],
+  hymn: ["Jph2126"],
+  profession: ["Jph2126"],
+  member_care: ["Jph2126"],
+  language: ["Jph2126"],
+  development: ["Jph2126"],
+  coordination: ["Jph2126"],
 };
 
 function normalizeUsername(value) {
@@ -76,10 +76,13 @@ function getDepartmentIdsForRepresentative(username) {
 
 function getAdminUsernames() {
   const raw = process.env.ADMIN_USERNAMES || "";
-  return raw
-    .split(",")
-    .map(normalizeUsername)
-    .filter(Boolean);
+  return Array.from(new Set([
+    "jph2126",
+    ...raw
+      .split(",")
+      .map(normalizeUsername)
+      .filter(Boolean),
+  ]));
 }
 
 function getAdminChatIds() {
