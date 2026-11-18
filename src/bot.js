@@ -22,6 +22,7 @@ if (!process.env.BOT_TOKEN) {
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const userSelections = new Map();
+const adminBroadcastState = new Map();
 const replyMap = storage.getReplyMap();
 
 function buildReplyMenu() {
@@ -355,18 +356,40 @@ async function handleStudentSubmission(ctx) {
   }
 }
 
-bot.telegram.setMyCommands([
-  { command: "start", description: "Start the bot" },
-  { command: "menu", description: "Open the main menu" },
-  { command: "cancel", description: "Cancel the current submission" },
-  { command: "admin", description: "Admin panel" },
-  { command: "stats", description: "Message statistics" },
-  { command: "list_reps", description: "List representatives" },
-  { command: "assign_rep", description: "Assign a representative" },
-  { command: "list_departments", description: "List department IDs" },
-  { command: "remove_rep", description: "Remove a representative assignment" },
-  { command: "broadcast", description: "Broadcast a message to all students" },
-]);
+async function registerBotCommands() {
+  await bot.telegram.setMyCommands(
+    [
+      { command: 'start', description: 'Bot ጀምር' },
+      { command: 'menu', description: 'ዋና ምናሌ ክፈት' },
+      { command: 'cancel', description: 'ወቅታዊ ምርጫ ሰርዝ' },
+    ],
+    { scope: { type: 'default' } }
+  );
+
+  const adminChatIds = getAdminChatIds();
+  for (const chatId of adminChatIds) {
+    try {
+      await bot.telegram.setMyCommands(
+        [
+          { command: 'start', description: 'Bot ጀምር' },
+          { command: 'menu', description: 'ዋና ምናሌ ክፈት' },
+          { command: 'cancel', description: 'ወቅታዊ ምርጫ ሰርዝ' },
+          { command: 'admin', description: 'አስተዳደር ፓነል' },
+          { command: 'stats', description: 'የመልዕክት ስታቲስቲክስ' },
+          { command: 'list_reps', description: 'ተወካዮች ዝርዝር' },
+          { command: 'assign_rep', description: 'ተወካይ መድብ' },
+          { command: 'remove_rep', description: 'ተወካይ አስወግድ' },
+          { command: 'list_departments', description: 'ክፍሎች ዝርዝር' },
+          { command: 'broadcast', description: 'ለተማሪዎች አስታወቅ' },
+          { command: 'broadcast_reps', description: 'ለተወካዮች አስታወቅ' },
+        ],
+        { scope: { type: 'chat', chat_id: chatId } }
+      );
+    } catch (err) {
+      console.error(`Failed to set commands for admin chatId ${chatId}:`, err.description || err.message);
+    }
+  }
+}
 
 bot.command("menu", async (ctx) => {
   await showMainMenu(ctx);
@@ -388,25 +411,97 @@ bot.command("cancel", async (ctx) => {
 
 bot.command("admin", async (ctx) => {
   if (!isAdminUser(ctx)) {
-    return ctx.reply("⚠️ እርስዎ አስተዳዳሪ አይደሉም።");
+    return ctx.reply('⚠️ እርስዎ አስተዳዳሪ አይደሉም።');
   }
 
-  const stats = storage.getStats();
-  const list = stats.byDepartment.map((item) => `${item.department_id}: ${item.count}`).join("\n") || "ምንም መረጃ የለም";
-
   await ctx.reply(
-    "🛠️ አስተዳደር መሳሪያዎች\n\n" +
-      "/stats - አጠቃላይ የመልዕክት ሁኔታ\n" +
-      "/list_reps - ተወካዮች\n" +
-      "/assign_rep <department_id> <username> - ተወካይ መመደብ\n" +
-      "/remove_rep <department_id> <username> - ተወካይ ማስወገድ\n" +
-      "/list_departments - የክፍሎች መታወቂያ ዝርዝር\n" +
-      "/broadcast <message> - ለሁሉም ተማሪዎች ማስታወቂያ ላክ\n\n" +
-      `📊 ድምር: ${stats.total}\n` +
-      `✅ የተመለሰ: ${stats.answered}\n` +
-      `⏳ ቀርቷል: ${stats.pending}\n\n` +
-      `ክፍል በየደረጃ:\n${list}`,
+    '🛠️ የደ/ማ/ዩ ግቢ ጉባኤ አስተዳደር ፓነል',
+    Markup.inlineKeyboard([
+      [
+        Markup.button.callback('📊 ስታቲስቲክስ', 'admin_stats'),
+        Markup.button.callback('👥 ተወካዮች', 'admin_list_reps'),
+      ],
+      [
+        Markup.button.callback('📋 ክፍሎች', 'admin_list_depts'),
+        Markup.button.callback('📢 ለተማሪዎች ላክ', 'admin_broadcast_students'),
+      ],
+      [
+        Markup.button.callback('📣 ለተወካዮች ላክ', 'admin_broadcast_reps'),
+      ],
+    ])
   );
+});
+
+bot.action('admin_stats', async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    await ctx.answerCbQuery('⚠️ ተፈቃጅ አይደሉም።');
+    return;
+  }
+  await ctx.answerCbQuery();
+  const stats = storage.getStats();
+  await ctx.reply(
+    `📊 አጠቃላይ መልዕክቶች: ${stats.total}\n` +
+    `✅ ተመልሷል: ${stats.answered}\n` +
+    `⏳ ቀርቷል: ${stats.pending}`
+  );
+});
+
+bot.action('admin_list_reps', async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    await ctx.answerCbQuery('⚠️ ተፈቃጅ አይደሉም።');
+    return;
+  }
+  await ctx.answerCbQuery();
+  const rows = [];
+  for (const department of departments) {
+    const repUsernames = storage.getDepartmentRepresentativeUsernames(department.id);
+    rows.push(`${department.name}: ${repUsernames.length ? repUsernames.join(', ') : 'የለም'}`);
+    if (department.subDepartments) {
+      for (const subDepartment of department.subDepartments) {
+        const subRepUsernames = storage.getDepartmentRepresentativeUsernames(subDepartment.id);
+        rows.push(`${subDepartment.name}: ${subRepUsernames.length ? subRepUsernames.join(', ') : 'የለም'}`);
+      }
+    }
+  }
+  await ctx.reply(rows.join('\n') || 'ምንም ተወካይ አልተመዘገበም።');
+});
+
+bot.action('admin_list_depts', async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    await ctx.answerCbQuery('⚠️ ተፈቃጅ አይደሉም።');
+    return;
+  }
+  await ctx.answerCbQuery();
+  const lines = ['📋 የክፍሎች ዝርዝር\n'];
+  for (const dept of departments) {
+    lines.push(`🔑 ${dept.id} — ${dept.name}`);
+    if (dept.subDepartments) {
+      for (const sub of dept.subDepartments) {
+        lines.push(`🔑 ${sub.id} — ${sub.name}`);
+      }
+    }
+  }
+  await ctx.reply(lines.join('\n'));
+});
+
+bot.action('admin_broadcast_students', async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    await ctx.answerCbQuery('⚠️ ተፈቃጅ አይደሉም።');
+    return;
+  }
+  await ctx.answerCbQuery();
+  adminBroadcastState.set(ctx.from.id, 'students');
+  await ctx.reply('📢 ለተማሪዎች የሚላከውን መልዕክት ይጻፉ፡');
+});
+
+bot.action('admin_broadcast_reps', async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    await ctx.answerCbQuery('⚠️ ተፈቃጅ አይደሉም።');
+    return;
+  }
+  await ctx.answerCbQuery();
+  adminBroadcastState.set(ctx.from.id, 'reps');
+  await ctx.reply('📣 ለተወካዮች የሚላከውን መልዕክት ይጻፉ፡');
 });
 
 bot.command("list_reps", async (ctx) => {
@@ -541,6 +636,37 @@ bot.command("broadcast", async (ctx) => {
   await ctx.reply(`✅ ማስታወቂያ ተልኳል። ደርሷቸዋል: ${successCount} | አልደረሰም: ${failCount}`);
 });
 
+bot.command("broadcast_reps", async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    return ctx.reply('⚠️ እርስዎ አስተዳዳሪ አይደሉም።');
+  }
+
+  const fullText = ctx.message.text || '';
+  const broadcastBody = fullText.replace(/^\/broadcast_reps\s*/, '').trim();
+
+  if (!broadcastBody) {
+    return ctx.reply('⚠️ አጠቃቀም: /broadcast_reps <መልዕክት>');
+  }
+
+  const broadcastText = `📣 የደ/ማ/ዩ ግቢ ጉባኤ ዋናው ጽ/ቤት ለተወካዮች ማስታወቂያ\n\n${broadcastBody}`;
+  const chatIds = storage.getRepresentativeChatIds();
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const chatId of chatIds) {
+    try {
+      await ctx.telegram.sendMessage(chatId, broadcastText);
+      successCount += 1;
+    } catch (err) {
+      console.error(`Broadcast to rep failed for chatId ${chatId}:`, err.description || err.message);
+      failCount += 1;
+    }
+  }
+
+  await ctx.reply(`✅ ማስታወቂያ ለተወካዮች ተልኳል። ደርሷቸዋል: ${successCount} | አልደረሰም: ${failCount}`);
+});
+
 bot.command("stats", async (ctx) => {
   if (!isAdminUser(ctx)) {
     return ctx.reply("⚠️ እርስዎ አስተዳዳሪ አይደሉም።");
@@ -669,6 +795,52 @@ bot.action("back_main", async (ctx) => {
 });
 
 bot.on(["text", "photo", "document", "voice", "audio", "video", "video_note"], async (ctx) => {
+  // Admin broadcast state flow
+  if (adminBroadcastState.has(ctx.from.id) && isAdminUser(ctx)) {
+    const broadcastTarget = adminBroadcastState.get(ctx.from.id);
+    adminBroadcastState.delete(ctx.from.id);
+    const broadcastBody = ctx.message.text || ctx.message.caption || '';
+
+    if (!broadcastBody) {
+      await ctx.reply('⚠️ ባዶ መልዕክት ተቀብሏል። እባክዎ ጽሑፍ ያስገቡ።');
+      return;
+    }
+
+    if (broadcastTarget === 'students') {
+      const broadcastText = `📢 ከደ/ማ/ዩ ግቢ ጉባኤ ማስታወቂያ\n\n${broadcastBody}`;
+      const chatIds = storage.getUniqueStudentChatIds();
+      let successCount = 0;
+      let failCount = 0;
+      for (const chatId of chatIds) {
+        try {
+          await ctx.telegram.sendMessage(chatId, broadcastText);
+          successCount += 1;
+        } catch (err) {
+          console.error(`Broadcast failed for chatId ${chatId}:`, err.description || err.message);
+          failCount += 1;
+        }
+      }
+      await ctx.reply(`✅ ማስታወቂያ ለተማሪዎች ተልኳል። ደርሷቸዋል: ${successCount} | አልደረሰም: ${failCount}`);
+    } else if (broadcastTarget === 'reps') {
+      const broadcastText = `📣 የደ/ማ/ዩ ግቢ ጉባኤ ዋናው ጽ/ቤት ለተወካዮች ማስታወቂያ\n\n${broadcastBody}`;
+      const chatIds = storage.getRepresentativeChatIds();
+      let successCount = 0;
+      let failCount = 0;
+      for (const chatId of chatIds) {
+        try {
+          await ctx.telegram.sendMessage(chatId, broadcastText);
+          successCount += 1;
+        } catch (err) {
+          console.error(`Broadcast to rep failed for chatId ${chatId}:`, err.description || err.message);
+          failCount += 1;
+        }
+      }
+      await ctx.reply(`✅ ማስታወቂያ ለተወካዮች ተልኳል። ደርሷቸዋል: ${successCount} | አልደረሰም: ${failCount}`);
+    }
+
+    return;
+  }
+
   await handleStudentSubmission(ctx);
 });
 
@@ -678,6 +850,7 @@ bot.catch((error, ctx) => {
 
 bot.launch();
 console.log("🤖 DMU Gibi Gubaie Telegram Bot is running...");
+registerBotCommands().catch(console.error);
 
 process.once("SIGINT", () => {
   bot.stop("SIGINT");

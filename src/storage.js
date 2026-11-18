@@ -336,6 +336,11 @@ function getUniqueStudentChatIds() {
   return rows.map((row) => Number(row.student_chat_id)).filter((v) => Number.isFinite(v));
 }
 
+function getRepresentativeChatIds() {
+  const rows = db.prepare('SELECT DISTINCT chat_id FROM representatives').all();
+  return rows.map(r => Number(r.chat_id)).filter(Boolean);
+}
+
 module.exports = {
   db,
   normalizeUsername,
@@ -356,4 +361,5 @@ module.exports = {
   getStats,
   removeDepartmentRepresentative,
   getUniqueStudentChatIds,
+  getRepresentativeChatIds,
 };
