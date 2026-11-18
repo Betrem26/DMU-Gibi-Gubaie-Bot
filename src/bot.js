@@ -1,4 +1,4 @@
-require("dotenv").config();
+﻿require("dotenv").config();
 
 const { Telegraf, Markup } = require("telegraf");
 const departments = require("./departments");
@@ -366,7 +366,15 @@ async function registerBotCommands() {
     { scope: { type: 'default' } }
   );
 
-  const adminChatIds = getAdminChatIds();
+  // Collect admin chat IDs from env AND from the representatives table by username
+  const adminChatIdsFromEnv = getAdminChatIds();
+  const adminChatIdsFromDb = getAdminUsernames()
+    .map((u) => storage.findRepresentativeByUsername(u))
+    .filter(Boolean)
+    .map((r) => Number(r.chat_id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+  const adminChatIds = Array.from(new Set([...adminChatIdsFromEnv, ...adminChatIdsFromDb]));
+
   for (const chatId of adminChatIds) {
     try {
       await bot.telegram.setMyCommands(
@@ -696,7 +704,7 @@ bot.start(async (ctx) => {
 
     const adminGreeting =
       "✅ አስተዳዳሪ ተገኝተዋል።\n\n" +
-      "እባክዎ /admin ን በመጠቀም የግቢ አስተዳደር ማስተካከያዎችን ይጠቀሙ።";
+      "👇 /admin ን ተጫኑ የአስተዳደር ፓነሉን ለመክፈት።";
 
     await ctx.reply(adminGreeting, { reply_markup: buildReplyMenu() });
     return;
