@@ -404,7 +404,6 @@ async function registerBotCommands() {
       { command: 'start', description: 'Bot ጀምር' },
       { command: 'menu', description: 'ዋና ማውጫ ክፈት' },
       { command: 'cancel', description: 'ወቅታዊ ምርጫ ሰርዝ' },
-      { command: 'my_pending', description: 'ያልተመለሱ መልዕክቶቼ' },
     ],
     { scope: { type: 'default' } }
   );
