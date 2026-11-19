@@ -401,6 +401,16 @@ function getRepresentativeChatIds() {
   return rows.map(r => Number(r.chat_id)).filter(Boolean);
 }
 
+function getMessageById(id) {
+  return db.prepare('SELECT * FROM messages WHERE id = ?').get(id);
+}
+
+function updateReplyStatusById({ id, status }) {
+  return db.prepare(
+    `UPDATE messages SET reply_status = ?, replied_at = CURRENT_TIMESTAMP WHERE id = ?`
+  ).run(status, id);
+}
+
 module.exports = {
   db,
   normalizeUsername,
@@ -426,4 +436,6 @@ module.exports = {
   removeDepartmentRepresentative,
   getUniqueStudentChatIds,
   getRepresentativeChatIds,
+  getMessageById,
+  updateReplyStatusById,
 };

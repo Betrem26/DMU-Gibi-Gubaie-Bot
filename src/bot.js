@@ -25,6 +25,8 @@ const userSelections = new Map();
 const adminBroadcastState = new Map();
 const adminAssignState = new Map();
 // value shape: { step: 'waiting_username' | 'waiting_dept', action: 'assign' | 'remove', username?: string }
+const repReplyState = new Map();
+// shape: { questionId: number, studentChatId: number, departmentName: string }
 const replyMap = storage.getReplyMap();
 
 function buildReplyMenu() {
@@ -455,6 +457,8 @@ bot.hears(["✍️ Send Message", "Send Message"], async (ctx) => {
 
 bot.command("cancel", async (ctx) => {
   userSelections.delete(ctx.from.id);
+  adminAssignState.delete(ctx.from.id);
+  repReplyState.delete(ctx.from.id);
   await ctx.reply("❌ የመልዕክት ማቅረብ ሂደቱ ተሰርዟል።");
   await showMainMenu(ctx);
 });
@@ -871,27 +875,21 @@ async function handlePendingReport(ctx) {
     return;
   }
 
-  // Group by department_id
-  const byDept = new Map();
-  for (const msg of pending) {
-    const key = msg.department_id;
-    if (!byDept.has(key)) byDept.set(key, { name: msg.department_name || key, msgs: [] });
-    byDept.get(key).msgs.push(msg);
-  }
+  await ctx.reply(`⏳ ያልተመለሱ መልዕክቶች — ${pending.length}`);
 
-  const lines = [`⏳ ያልተመለሱ መልዕክቶች — ${pending.length}`, ''];
-  for (const [, dept] of byDept) {
-    lines.push(`📂 ${dept.name} (${dept.msgs.length})`);
-    for (const m of dept.msgs) {
-      const username = m.rep_username || 'ያልታወቀ';
-      const preview = (m.message_text || '').substring(0, 50);
-      const ellipsis = (m.message_text || '').length > 50 ? '...' : '';
-      lines.push(`• #${m.id} | @${username} | ${preview}${ellipsis} | ${timeAgo(m.created_at)}`);
-    }
-    lines.push('');
+  for (const m of pending) {
+    const username = m.rep_username || 'ያልታወቀ';
+    const msgText = m.message_text ? m.message_text : 'ሚዲያ ፋይል';
+    const text =
+      `⏳ #${m.id} | 📂 ${m.department_name || m.department_id}\n` +
+      `👤 @${username}\n` +
+      `💬 ${msgText}\n` +
+      `🕐 ${timeAgo(m.created_at)}`;
+    await ctx.reply(
+      text,
+      Markup.inlineKeyboard([[Markup.button.callback(`↩ መልስ #${m.id}`, `rep_reply_${m.id}`)]])
+    );
   }
-
-  await sendLong(ctx, lines.join('\n').trimEnd());
 }
 
 async function handleFullReport(ctx) {
@@ -937,14 +935,22 @@ bot.command('my_pending', async (ctx) => {
   if (!msgs.length) {
     return ctx.reply('✅ በወቅቱ ምንም ያልተመለሰ መልዕክት የለም።');
   }
-  const lines = [`⏳ የእርስዎ ያልተመለሱ መልዕክቶች — ${msgs.length}`, ''];
+
+  await ctx.reply(`⏳ የእርስዎ ያልተመለሱ መልዕክቶች — ${msgs.length}`);
+
   for (const m of msgs) {
-    const username = m.rep_username || ctx.from.username || 'ያልታወቀ';
-    const preview = (m.message_text || '').substring(0, 50);
-    const ellipsis = (m.message_text || '').length > 50 ? '...' : '';
-    lines.push(`• #${m.id} | 📂 ${m.department_name || m.department_id} | @${username} | ${preview}${ellipsis} | ${timeAgo(m.created_at)}`);
+    const username = ctx.from.username || 'ያልታወቀ';
+    const msgText = m.message_text ? m.message_text : 'ሚዲያ ፋይል';
+    const text =
+      `⏳ #${m.id} | 📂 ${m.department_name || m.department_id}\n` +
+      `👤 @${username}\n` +
+      `💬 ${msgText}\n` +
+      `🕐 ${timeAgo(m.created_at)}`;
+    await ctx.reply(
+      text,
+      Markup.inlineKeyboard([[Markup.button.callback(`↩ መልስ #${m.id}`, `rep_reply_${m.id}`)]])
+    );
   }
-  await sendLong(ctx, lines.join('\n'));
 });
 
 bot.command('report', async (ctx) => {
@@ -1044,7 +1050,60 @@ bot.action("back_main", async (ctx) => {
   await showMainMenu(ctx);
 });
 
+bot.action(/^rep_reply_(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const questionId = Number(ctx.match[1]);
+
+  // Must be a rep OR admin
+  if (!storage.isRepresentativeUser(ctx.from.id, ctx.from.username) && !isAdminUser(ctx)) {
+    return ctx.reply('⚠️ ይህ ትዕዛዝ ለተወካዮች ብቻ ነው።');
+  }
+
+  // Look up the message by id from messages table
+  const msg = storage.getMessageById(questionId);
+  if (!msg) {
+    return ctx.reply(`⚠️ መልዕክት #${questionId} አልተገኘም።`);
+  }
+  if (msg.reply_status === 'answered') {
+    return ctx.reply(`ℹ️ መልዕክት #${questionId} አስቀድሞ ተመልሷል።`);
+  }
+
+  repReplyState.set(ctx.from.id, {
+    questionId,
+    studentChatId: Number(msg.student_chat_id),
+    departmentName: msg.department_name,
+  });
+
+  await ctx.reply(
+    `✍️ ለ #${questionId} (${msg.department_name}) መልስዎን ይጻፉ።\n\n❌ ለመሰረዝ /cancel ይጻፉ።`
+  );
+});
+
 bot.on(["text", "photo", "document", "voice", "audio", "video", "video_note"], async (ctx) => {
+  // Rep inline reply flow
+  if (repReplyState.has(ctx.from.id)) {
+    const state = repReplyState.get(ctx.from.id);
+    repReplyState.delete(ctx.from.id);
+
+    const replyText = ctx.message.text;
+
+    try {
+      await ctx.telegram.sendMessage(
+        state.studentChatId,
+        `📩 ከደ/ማ/ዩ ግ/ጉባኤ የተላከ ምላሽ፦\n\n${replyText}`
+      );
+
+      // Update status
+      storage.updateReplyStatusById({ id: state.questionId, status: 'answered' });
+
+      await ctx.reply(`✅ መልስዎ ለተማሪው ተልኳል። (መልዕክት #${state.questionId})`);
+    } catch (err) {
+      console.error('Inline reply failed:', err.message);
+      await ctx.reply('❌ መልሱን መላክ አልተቻለም። እንደገና ይሞክሩ።');
+    }
+    return;
+  }
+
   // Admin assign/remove state flow
   if (adminAssignState.has(ctx.from.id) && isAdminUser(ctx)) {
     const state = adminAssignState.get(ctx.from.id);
