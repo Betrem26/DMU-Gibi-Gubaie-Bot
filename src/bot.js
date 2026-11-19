@@ -384,7 +384,7 @@ async function registerBotCommands() {
   await bot.telegram.setMyCommands(
     [
       { command: 'start', description: 'Bot ጀምር' },
-      { command: 'menu', description: 'ዋና ምናሌ ክፈት' },
+      { command: 'menu', description: 'ዋና ማውጫ ክፈት' },
       { command: 'cancel', description: 'ወቅታዊ ምርጫ ሰርዝ' },
     ],
     { scope: { type: 'default' } }
@@ -404,7 +404,7 @@ async function registerBotCommands() {
       await bot.telegram.setMyCommands(
         [
           { command: 'start', description: 'Bot ጀምር' },
-          { command: 'menu', description: 'ዋና ምናሌ ክፈት' },
+          { command: 'menu', description: 'ዋና ማውጫ ክፈት' },
           { command: 'cancel', description: 'ወቅታዊ ምርጫ ሰርዝ' },
           { command: 'admin', description: 'አስተዳደር ፓነል' },
           { command: 'stats', description: 'የመልዕክት ስታቲስቲክስ' },
@@ -660,7 +660,7 @@ bot.command('remove_rep', async (ctx) => {
 
   // Mode A — no args: /remove_rep
   adminAssignState.set(ctx.from.id, { step: 'waiting_username', action: 'remove' });
-  return ctx.reply('👤 የሚወገደውን ተወካይ ስም ያስገቡ (@ ሳያስፈልግ)፡');
+  return ctx.reply('👤 ከተወካይነት ሊያስወግዱት የፈለጉትን የግቢ ጉባኤ አባል የቴሌግራም username ያስገቡ (@ ሳያስፈልግ)፡');
 });
 
 bot.action(/^assign_dept_(.+)$/, async (ctx) => {
@@ -843,8 +843,8 @@ bot.start(async (ctx) => {
 
   await ctx.reply(
     "🕊️ እንኳን ወደ ደ/ማ/ዩ/ጉባኤ በደህና መጣችሁ!\n\n" +
-      "ለአገልግሎታችን ግብዓት ይሆነን ዘንድ ማንኛውንም ሃሳብ፣ " +
-      "አስተያየት እንዲሁም ጥያቄ ማቅረብ ትችላላችሁ።",
+      "ለግቢ ጉባኤያችን አገልግሎት እና ለኦርቶዶክሳዊ ህብረታችን ግብዓት  ይሆነን ዘንድ ማንኛውንም ሃሳብ፣ " +
+      "አስተያየት እንዲሁም ጥያቄ ማቅረብ ትችላላችሁ። ስለሚሰጡን አስተያየት በእግዚአብሔር ስም እናመሰግናለን 🙏",
     { reply_markup: buildReplyMenu() },
   );
 
@@ -930,7 +930,7 @@ bot.on(["text", "photo", "document", "voice", "audio", "video", "video_note"], a
       const rawInput = ctx.message.text || '';
       const normalizedUsername = normalizeUsername(rawInput.trim());
       if (!normalizedUsername) {
-        await ctx.reply('❌ ትክክለኛ የተወካይ ስም ያስፈልጋል። እባክዎ እንደገና ይሞክሩ።');
+        await ctx.reply('❌ ትክክለኛ የቴሌግራም username ያስፈልጋል። እባክዎ እንደገና ይሞክሩ።');
         return;
       }
       adminAssignState.set(ctx.from.id, { step: 'waiting_dept', action: state.action, username: normalizedUsername });
