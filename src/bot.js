@@ -125,16 +125,11 @@ async function showMainMenu(ctx) {
 }
 
 async function askForMessage(ctx, department) {
-  userSelections.set(ctx.from.id, { department, anonymous: false });
-
+  userSelections.set(ctx.from.id, { department });
   await ctx.reply(
-    `📂 የመረጡት ክፍል፦ ${department.name}\n\nመልዕክትዎን እንዴት መላክ ይፈልጋሉ?`,
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("✍️ በስሜ ላክ", "anon_no"),
-        Markup.button.callback("🎭 በስም አልባ ላክ", "anon_yes"),
-      ],
-    ]),
+    `📂 የመረጡት ክፍል፦ ${department.name}\n\n` +
+      "✍ እባክዎ ሃሳብዎን፣ ጥያቄዎን ወይም አስተያየትዎን አሁን ይጻፉ።\n\n" +
+      "❌ ለመሰረዝ /cancel ይጻፉ።",
   );
 }
 
@@ -201,27 +196,18 @@ function getMessageType(message) {
   return "unsupported";
 }
 
-function buildStudentForwardMessage({ department, studentName, studentUsername, senderId, messageType, messageText, anonymous }) {
-  const displayName = anonymous ? "익명 / በስም አልባ" : (studentName || "ያልታወቀ");
-  const displayUsername = anonymous ? "익명 / በስም አልባ" : studentUsername;
-
-  let base =
+function buildStudentForwardMessage({ department, studentName, studentUsername, senderId, messageType, messageText }) {
+  const base =
     "📨 አዲስ የተማሪ መልዕክት\n\n" +
     `📂 ክፍል፦ ${department.name}\n` +
-    `👤 ስም፦ ${displayName}\n` +
-    `🔗 Username፦ ${displayUsername}\n`;
-
-  if (!anonymous) {
-    base += `🆔 Telegram ID፦ ${senderId}\n`;
-  }
-
-  base += `\n📎 የመልዕክት አይነት፦ ${messageType}\n\n`;
-
+    `👤 ስም፦ ${studentName || "ያልታወቀ"}\n` +
+    `🔗 Username፦ ${studentUsername}\n` +
+    `🆔 Telegram ID፦ ${senderId}\n\n` +
+    `📎 የመልዕክት አይነት፦ ${messageType}\n\n`;
   if (messageText) {
-    return `${base}💬 መልዕክት፦\n${messageText}\n\n↩️ ለተማሪው በቀጥታ ለመመለስ፦\nበዚህ መልዕክት ላይ Reply / መልስ ይምረጡ።`;
+    return `${base}💬 መልዕክት፦\n${messageText}\n\n↩ ለተማሪው በቀጥታ ለመመለስ፦\nበዚህ መልዕክት ላይ Reply / መልስ ይምረጡ።`;
   }
-
-  return `${base}📎 ሚዲያ ፋይል አስገብቷል።\n\n↩️ ለተማሪው በቀጥታ ለመመለስ፦\nበዚህ መልዕክት ላይ Reply / መልስ ይምረጡ።`;
+  return `${base}📎 ሚዲያ ፋይል አስገብቷል።\n\n↩ ለተማሪው በቀጥታ ለመመለስ፦\nበዚህ መልዕክት ላይ Reply / መልስ ይምረጡ።`;
 }
 
 function getStatusForMediaType(type) {
@@ -293,7 +279,7 @@ async function handleStudentSubmission(ctx) {
     return;
   }
 
-  const { department: selectedDepartment, anonymous = false } = selection;
+  const { department: selectedDepartment } = selection;
 
   if (!getStatusForMediaType(messageType)) {
     await ctx.reply("⚠️ ይህ አይነት መልዕክት አሁን አይደገፍም።\n\nእባክዎ ጽሑፍ፣ ፎቶ፣ ሰነድ ወይም ድምፅ ይምረጡ።");
@@ -889,31 +875,6 @@ bot.action(/^subdept_(.+)$/, async (ctx) => {
     id: result.subDepartment.id,
     name: result.subDepartment.name,
   });
-});
-
-bot.action("anon_no", async (ctx) => {
-  await ctx.answerCbQuery();
-  const selection = userSelections.get(ctx.from.id);
-  if (!selection) return ctx.reply("ℹ️ መጀመሪያ ክፍል ይምረጡ።");
-  userSelections.set(ctx.from.id, { department: selection.department, anonymous: false });
-  await ctx.reply(
-    `📂 የመረጡት ክፍል፦ ${selection.department.name}\n\n` +
-      "✍️ እባክዎ ሃሳብዎን፣ ጥያቄዎን ወይም አስተያየትዎን አሁን ይጻፉ።\n\n" +
-      "❌ ለመሰረዝ /cancel ይጻፉ።",
-  );
-});
-
-bot.action("anon_yes", async (ctx) => {
-  await ctx.answerCbQuery();
-  const selection = userSelections.get(ctx.from.id);
-  if (!selection) return ctx.reply("ℹ️ መጀመሪያ ክፍል ይምረጡ።");
-  userSelections.set(ctx.from.id, { department: selection.department, anonymous: true });
-  await ctx.reply(
-    `📂 የመረጡት ክፍል፦ ${selection.department.name}\n\n` +
-      "🎭 መልዕክትዎ በስም አልባ ይላካል።\n\n" +
-      "✍️ እባክዎ ሃሳብዎን፣ ጥያቄዎን ወይም አስተያየትዎን አሁን ይጻፉ።\n\n" +
-      "❌ ለመሰረዝ /cancel ይጻፉ።",
-  );
 });
 
 bot.action("back_main", async (ctx) => {
