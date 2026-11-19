@@ -23,6 +23,8 @@ if (!process.env.BOT_TOKEN) {
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const userSelections = new Map();
 const adminBroadcastState = new Map();
+const adminAssignState = new Map();
+// value shape: { step: 'waiting_username' | 'waiting_dept', action: 'assign' | 'remove', username?: string }
 const replyMap = storage.getReplyMap();
 
 function buildReplyMenu() {
@@ -163,6 +165,28 @@ function makeKeyboard(items) {
     rows.push(row);
   }
 
+  return Markup.inlineKeyboard(rows);
+}
+
+function buildDepartmentAssignKeyboard(action) {
+  const prefix = action === 'assign' ? 'assign_dept_' : 'remove_dept_';
+  const allItems = [];
+  for (const dept of departments) {
+    allItems.push({ id: dept.id, name: dept.name });
+    if (dept.subDepartments) {
+      for (const sub of dept.subDepartments) {
+        allItems.push({ id: sub.id, name: sub.name });
+      }
+    }
+  }
+  const rows = [];
+  for (let i = 0; i < allItems.length; i += 2) {
+    const row = [Markup.button.callback(allItems[i].name, `${prefix}${allItems[i].id}`)];
+    if (allItems[i + 1]) {
+      row.push(Markup.button.callback(allItems[i + 1].name, `${prefix}${allItems[i + 1].id}`));
+    }
+    rows.push(row);
+  }
   return Markup.inlineKeyboard(rows);
 }
 
@@ -534,39 +558,51 @@ bot.command("list_reps", async (ctx) => {
   await ctx.reply(rows.join("\n") || "ምንም ተወካይ አልተመዘገበም።");
 });
 
-bot.command("assign_rep", async (ctx) => {
+bot.command('assign_rep', async (ctx) => {
   if (!isAdminUser(ctx)) {
-    return ctx.reply("⚠️ እርስዎ አስተዳዳሪ አይደሉም።");
+    return ctx.reply('⚠️ እርስዎ አስተዳዳሪ አይደሉም።');
   }
 
-  const args = (ctx.message.text || "").split(/\s+/).slice(1);
-  if (args.length < 2) {
-    return ctx.reply("Use: /assign_rep <department_id> <username>");
+  const args = (ctx.message.text || '').split(/\s+/).slice(1);
+
+  // Mode C — both args (old behavior): /assign_rep <dept_id> <username>
+  if (args.length >= 2) {
+    const [departmentId, username] = args;
+    const normalizedUsername = normalizeUsername(username);
+    if (!normalizedUsername) {
+      return ctx.reply('❌ ትክክለኛ የተወካይ ስም ያስፈልጋል።');
+    }
+    const rep = storage.findRepresentativeByUsername(normalizedUsername);
+    if (!rep) {
+      return ctx.reply(
+        '⚠️ የተመዘገበ ተወካይ አይደለም።\n\nእባክዎ ተወካዩ በ /start አስተካክለው እንዲጀምር ይጠይቁ።',
+      );
+    }
+    storage.assignDepartmentRepresentative({
+      departmentId,
+      representativeUserId: rep.telegram_user_id,
+      username: normalizedUsername,
+      chatId: Number(rep.chat_id),
+    });
+    return ctx.reply(`✅ ${normalizedUsername} ወደ ${departmentId} ተመድቧል።`);
   }
 
-  const [departmentId, username] = args;
-  const normalizedUsername = normalizeUsername(username);
-
-  if (!normalizedUsername) {
-    return ctx.reply("❌ ትክክለኛ የተወካይ ስም ያስፈልጋል።");
-  }
-
-  const rep = storage.findRepresentativeByUsername(normalizedUsername);
-  if (!rep) {
+  // Mode B — username only: /assign_rep <username>
+  if (args.length === 1) {
+    const normalizedUsername = normalizeUsername(args[0]);
+    if (!normalizedUsername) {
+      return ctx.reply('❌ ትክክለኛ የተወካይ ስም ያስፈልጋል።');
+    }
+    adminAssignState.set(ctx.from.id, { step: 'waiting_dept', action: 'assign', username: normalizedUsername });
     return ctx.reply(
-      "⚠️ የተመዘገበ ተወካይ አይደለም።\n\n" +
-        "እባክዎ ተወካዩ በ /start አስተካክለው እንዲጀምር ይጠይቁ።",
+      `👤 ተወካይ፦ ${normalizedUsername}\n\nክፍሉን ይምረጡ:`,
+      buildDepartmentAssignKeyboard('assign'),
     );
   }
 
-  storage.assignDepartmentRepresentative({
-    departmentId,
-    representativeUserId: rep.telegram_user_id,
-    username: normalizedUsername,
-    chatId: Number(rep.chat_id),
-  });
-
-  await ctx.reply(`✅ ${normalizedUsername} ወደ ${departmentId} ተመድቧል።`);
+  // Mode A — no args: /assign_rep
+  adminAssignState.set(ctx.from.id, { step: 'waiting_username', action: 'assign' });
+  return ctx.reply('👤 ተወካዩን ስም ያስገቡ (@ ሳያስፈልግ)፡');
 });
 
 bot.command("list_departments", async (ctx) => {
@@ -587,30 +623,114 @@ bot.command("list_departments", async (ctx) => {
   await ctx.reply(lines.join("\n"));
 });
 
-bot.command("remove_rep", async (ctx) => {
+bot.command('remove_rep', async (ctx) => {
   if (!isAdminUser(ctx)) {
-    return ctx.reply("⚠️ እርስዎ አስተዳዳሪ አይደሉም።");
+    return ctx.reply('⚠️ እርስዎ አስተዳዳሪ አይደሉም።');
   }
 
-  const args = (ctx.message.text || "").split(/\s+/).slice(1);
-  if (args.length < 2) {
-    return ctx.reply("⚠️ አጠቃቀም: /remove_rep <department_id> <username>");
+  const args = (ctx.message.text || '').split(/\s+/).slice(1);
+
+  // Mode C — both args (old behavior): /remove_rep <dept_id> <username>
+  if (args.length >= 2) {
+    const [departmentId, rawUsername] = args;
+    const username = normalizeUsername(rawUsername);
+    if (!username) {
+      return ctx.reply('❌ ትክክለኛ የተወካይ ስም ያስፈልጋል።');
+    }
+    const info = storage.removeDepartmentRepresentative({ departmentId, username });
+    if (info.changes > 0) {
+      return ctx.reply(`✅ ${username} ከ${departmentId} ተወካይነት ተወግዷል።`);
+    } else {
+      return ctx.reply('⚠️ ያቀረቡት ተወካይ ወይም ክፍል አልተገኘም።');
+    }
   }
 
-  const [departmentId, rawUsername] = args;
-  const username = normalizeUsername(rawUsername);
+  // Mode B — username only: /remove_rep <username>
+  if (args.length === 1) {
+    const normalizedUsername = normalizeUsername(args[0]);
+    if (!normalizedUsername) {
+      return ctx.reply('❌ ትክክለኛ የተወካይ ስም ያስፈልጋል።');
+    }
+    adminAssignState.set(ctx.from.id, { step: 'waiting_dept', action: 'remove', username: normalizedUsername });
+    return ctx.reply(
+      `👤 ተወካይ፦ ${normalizedUsername}\n\nክፍሉን ይምረጡ:`,
+      buildDepartmentAssignKeyboard('remove'),
+    );
+  }
 
-  if (!username) {
-    return ctx.reply("❌ ትክክለኛ የተወካይ ስም ያስፈልጋል።");
+  // Mode A — no args: /remove_rep
+  adminAssignState.set(ctx.from.id, { step: 'waiting_username', action: 'remove' });
+  return ctx.reply('👤 የሚወገደውን ተወካይ ስም ያስገቡ (@ ሳያስፈልግ)፡');
+});
+
+bot.action(/^assign_dept_(.+)$/, async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    await ctx.answerCbQuery('⚠️ ተፈቃጅ አይደሉም።');
+    return;
+  }
+  await ctx.answerCbQuery();
+  const departmentId = ctx.match[1];
+  const state = adminAssignState.get(ctx.from.id);
+  if (!state || state.action !== 'assign') {
+    return ctx.reply('⚠️ ምርጫ ጊዜው አልፎበታል። /assign_rep ን እንደገና ይሞክሩ።');
+  }
+  const { username } = state;
+  adminAssignState.delete(ctx.from.id);
+
+  // Resolve department name
+  let deptName = departmentId;
+  const mainDept = getDepartmentById(departmentId);
+  if (mainDept) {
+    deptName = mainDept.name;
+  } else {
+    const subResult = getSubDepartmentById(departmentId);
+    if (subResult) deptName = subResult.subDepartment.name;
+  }
+
+  const rep = storage.findRepresentativeByUsername(username);
+  if (!rep) {
+    return ctx.reply(
+      `⚠️ ${username} የተመዘገበ ተወካይ አይደለም።\n\nእባክዎ ተወካዩ በ /start አስተካክለው እንዲጀምር ይጠይቁ።`,
+    );
+  }
+  storage.assignDepartmentRepresentative({
+    departmentId,
+    representativeUserId: rep.telegram_user_id,
+    username,
+    chatId: Number(rep.chat_id),
+  });
+  await ctx.reply(`✅ ${username} ለ ${deptName} ተመድቧል።`);
+});
+
+bot.action(/^remove_dept_(.+)$/, async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    await ctx.answerCbQuery('⚠️ ተፈቃጅ አይደሉም።');
+    return;
+  }
+  await ctx.answerCbQuery();
+  const departmentId = ctx.match[1];
+  const state = adminAssignState.get(ctx.from.id);
+  if (!state || state.action !== 'remove') {
+    return ctx.reply('⚠️ ምርጫ ጊዜው አልፎበታል። /remove_rep ን እንደገና ይሞክሩ።');
+  }
+  const { username } = state;
+  adminAssignState.delete(ctx.from.id);
+
+  // Resolve department name
+  let deptName = departmentId;
+  const mainDept = getDepartmentById(departmentId);
+  if (mainDept) {
+    deptName = mainDept.name;
+  } else {
+    const subResult = getSubDepartmentById(departmentId);
+    if (subResult) deptName = subResult.subDepartment.name;
   }
 
   const info = storage.removeDepartmentRepresentative({ departmentId, username });
-
-  if (info.changes > 0) {
-    await ctx.reply(`✅ ${username} ከ${departmentId} ተወካይነት ተወግዷል።`);
-  } else {
-    await ctx.reply("⚠️ ያቀረቡት ተወካይ ወይም ክፍል አልተገኘም።");
+  if (info.changes === 0) {
+    return ctx.reply(`⚠️ ${username} በ ${deptName} ውስጥ አልተገኘም።`);
   }
+  await ctx.reply(`✅ ${username} ከ ${deptName} ተወግዷል።`);
 });
 
 bot.command("broadcast", async (ctx) => {
@@ -803,6 +923,25 @@ bot.action("back_main", async (ctx) => {
 });
 
 bot.on(["text", "photo", "document", "voice", "audio", "video", "video_note"], async (ctx) => {
+  // Admin assign/remove state flow
+  if (adminAssignState.has(ctx.from.id) && isAdminUser(ctx)) {
+    const state = adminAssignState.get(ctx.from.id);
+    if (state.step === 'waiting_username') {
+      const rawInput = ctx.message.text || '';
+      const normalizedUsername = normalizeUsername(rawInput.trim());
+      if (!normalizedUsername) {
+        await ctx.reply('❌ ትክክለኛ የተወካይ ስም ያስፈልጋል። እባክዎ እንደገና ይሞክሩ።');
+        return;
+      }
+      adminAssignState.set(ctx.from.id, { step: 'waiting_dept', action: state.action, username: normalizedUsername });
+      await ctx.reply(
+        `👤 ተወካይ፦ ${normalizedUsername}\n\nክፍሉን ይምረጡ:`,
+        buildDepartmentAssignKeyboard(state.action),
+      );
+    }
+    return;
+  }
+
   // Admin broadcast state flow
   if (adminBroadcastState.has(ctx.from.id) && isAdminUser(ctx)) {
     const broadcastTarget = adminBroadcastState.get(ctx.from.id);
