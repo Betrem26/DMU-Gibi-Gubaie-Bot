@@ -55,6 +55,35 @@ function getSubDepartmentById(subDepartmentId) {
   return null;
 }
 
+function timeAgo(dateStr) {
+  if (!dateStr) return 'ጊዜ አይታወቅም';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 60) return `${mins} ደቂቃ በፊት`;
+  if (hours < 24) return `${hours} ሰዓት በፊት`;
+  return `${days} ቀን በፊት`;
+}
+
+function splitMessage(text, limit = 4096) {
+  const chunks = [];
+  while (text.length > limit) {
+    let cut = text.lastIndexOf('\n', limit);
+    if (cut <= 0) cut = limit;
+    chunks.push(text.slice(0, cut));
+    text = text.slice(cut).trimStart();
+  }
+  if (text) chunks.push(text);
+  return chunks;
+}
+
+async function sendLong(ctx, text) {
+  for (const chunk of splitMessage(text)) {
+    await ctx.reply(chunk);
+  }
+}
+
 function isAdminUser(ctx) {
   const username = normalizeUsername(ctx.from.username);
   const adminUsernames = getAdminUsernames();
@@ -371,6 +400,7 @@ async function registerBotCommands() {
       { command: 'start', description: 'Bot ጀምር' },
       { command: 'menu', description: 'ዋና ማውጫ ክፈት' },
       { command: 'cancel', description: 'ወቅታዊ ምርጫ ሰርዝ' },
+      { command: 'my_pending', description: 'ያልተመለሱ መልዕክቶቼ' },
     ],
     { scope: { type: 'default' } }
   );
@@ -391,8 +421,11 @@ async function registerBotCommands() {
           { command: 'start', description: 'Bot ጀምር' },
           { command: 'menu', description: 'ዋና ማውጫ ክፈት' },
           { command: 'cancel', description: 'ወቅታዊ ምርጫ ሰርዝ' },
+          { command: 'my_pending', description: 'ያልተመለሱ መልዕክቶቼ' },
           { command: 'admin', description: 'አስተዳደር ፓነል' },
           { command: 'stats', description: 'የመልዕክት ስታቲስቲክስ' },
+          { command: 'pending', description: 'ያልተመለሱ መልዕክቶች' },
+          { command: 'report', description: 'ሙሉ ሪፖርት' },
           { command: 'list_reps', description: 'ተወካዮች ዝርዝር' },
           { command: 'assign_rep', description: 'ተወካይ መድብ' },
           { command: 'remove_rep', description: 'ተወካይ አስወግድ' },
@@ -440,10 +473,14 @@ bot.command("admin", async (ctx) => {
       ],
       [
         Markup.button.callback('📋 ክፍሎች', 'admin_list_depts'),
-        Markup.button.callback('📢 ለተማሪዎች ላክ', 'admin_broadcast_students'),
+        Markup.button.callback('⏳ ያልተመለሱ', 'admin_pending'),
       ],
       [
+        Markup.button.callback('📢 ለተማሪዎች ላክ', 'admin_broadcast_students'),
         Markup.button.callback('📣 ለተወካዮች ላክ', 'admin_broadcast_reps'),
+      ],
+      [
+        Markup.button.callback('📈 ሙሉ ሪፖርት', 'admin_report'),
       ],
     ])
   );
@@ -455,12 +492,20 @@ bot.action('admin_stats', async (ctx) => {
     return;
   }
   await ctx.answerCbQuery();
-  const stats = storage.getStats();
-  await ctx.reply(
-    `📊 አጠቃላይ መልዕክቶች: ${stats.total}\n` +
-    `✅ ተመልሷል: ${stats.answered}\n` +
-    `⏳ ቀርቷል: ${stats.pending}`
-  );
+  const stats = storage.getDetailedStats();
+  const pct = (n) => stats.total > 0 ? Math.round((n / stats.total) * 100) : 0;
+  const lines = [
+    `📊 አጠቃላይ መልዕክቶች: ${stats.total}`,
+    `✅ ተመልሷል: ${stats.answered} (${pct(stats.answered)}%)`,
+    `⏳ ቀርቷል: ${stats.pending} (${pct(stats.pending)}%)`,
+  ];
+  if (stats.byDepartment.length) {
+    lines.push('', '📂 በክፍል፡');
+    for (const d of stats.byDepartment) {
+      lines.push(`• ${d.department_name || d.department_id}: ${d.total} ጠቅላላ | ✅ ${d.answered} | ⏳ ${d.pending}`);
+    }
+  }
+  await sendLong(ctx, lines.join('\n'));
 });
 
 bot.action('admin_list_reps', async (ctx) => {
@@ -519,6 +564,24 @@ bot.action('admin_broadcast_reps', async (ctx) => {
   await ctx.answerCbQuery();
   adminBroadcastState.set(ctx.from.id, 'reps');
   await ctx.reply('📣 ለተወካዮች የሚላከውን መልዕክት ይጻፉ፡');
+});
+
+bot.action('admin_pending', async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    await ctx.answerCbQuery('⚠️ ተፈቃጅ አይደሉም።');
+    return;
+  }
+  await ctx.answerCbQuery();
+  await handlePendingReport(ctx);
+});
+
+bot.action('admin_report', async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    await ctx.answerCbQuery('⚠️ ተፈቃጅ አይደሉም።');
+    return;
+  }
+  await ctx.answerCbQuery();
+  await handleFullReport(ctx);
 });
 
 bot.command("list_reps", async (ctx) => {
@@ -785,12 +848,110 @@ bot.command("stats", async (ctx) => {
     return ctx.reply("⚠️ እርስዎ አስተዳዳሪ አይደሉም።");
   }
 
-  const stats = storage.getStats();
-  await ctx.reply(
-    `📊 አጠቃላይ መልዕክቶች: ${stats.total}\n` +
-      `✅ ተመልሷል: ${stats.answered}\n` +
-      `⏳ ቀርቷል: ${stats.pending}`,
-  );
+  const stats = storage.getDetailedStats();
+  const pct = (n) => stats.total > 0 ? Math.round((n / stats.total) * 100) : 0;
+  const lines = [
+    `📊 አጠቃላይ መልዕክቶች: ${stats.total}`,
+    `✅ ተመልሷል: ${stats.answered} (${pct(stats.answered)}%)`,
+    `⏳ ቀርቷል: ${stats.pending} (${pct(stats.pending)}%)`,
+  ];
+  if (stats.byDepartment.length) {
+    lines.push('', '📂 በክፍል፡');
+    for (const d of stats.byDepartment) {
+      lines.push(`• ${d.department_name || d.department_id}: ${d.total} ጠቅላላ | ✅ ${d.answered} | ⏳ ${d.pending}`);
+    }
+  }
+  await sendLong(ctx, lines.join('\n'));
+});
+
+async function handlePendingReport(ctx) {
+  const pending = storage.getPendingMessages();
+  if (!pending.length) {
+    await ctx.reply('📭 በወቅቱ ምንም ያልተመለሰ መልዕክት የለም።');
+    return;
+  }
+
+  // Group by department_id
+  const byDept = new Map();
+  for (const msg of pending) {
+    const key = msg.department_id;
+    if (!byDept.has(key)) byDept.set(key, { name: msg.department_name || key, msgs: [] });
+    byDept.get(key).msgs.push(msg);
+  }
+
+  const lines = [`⏳ ያልተመለሱ መልዕክቶች — ${pending.length}`, ''];
+  for (const [, dept] of byDept) {
+    lines.push(`📂 ${dept.name} (${dept.msgs.length})`);
+    for (const m of dept.msgs) {
+      const username = m.rep_username || 'ያልታወቀ';
+      const preview = (m.message_text || '').substring(0, 50);
+      const ellipsis = (m.message_text || '').length > 50 ? '...' : '';
+      lines.push(`• #${m.id} | @${username} | ${preview}${ellipsis} | ${timeAgo(m.created_at)}`);
+    }
+    lines.push('');
+  }
+
+  await sendLong(ctx, lines.join('\n').trimEnd());
+}
+
+async function handleFullReport(ctx) {
+  const stats = storage.getDetailedStats();
+  const pct = (n) => stats.total > 0 ? Math.round((n / stats.total) * 100) : 0;
+  const lines = [
+    '📈 አጠቃላይ ሪፖርት',
+    '',
+    `📨 ጠቅላላ መልዕክቶች: ${stats.total}`,
+    `✅ የተመለሱ: ${stats.answered} (${pct(stats.answered)}%)`,
+    `⏳ ያልተመለሱ: ${stats.pending} (${pct(stats.pending)}%)`,
+  ];
+
+  if (stats.byDepartment.length) {
+    lines.push('', '📂 በክፍል፡');
+    for (const d of stats.byDepartment) {
+      lines.push(`• ${d.department_name || d.department_id}: ${d.total} ጠቅላላ | ✅ ${d.answered} | ⏳ ${d.pending}`);
+    }
+  }
+
+  if (stats.topReps.length) {
+    lines.push('', '🏆 ምርጥ ተወካዮች (በምላሽ ብዛት)፡');
+    stats.topReps.forEach((rep, i) => {
+      lines.push(`${i + 1}. @${rep.username} — ${rep.answered_count} ምላሽ`);
+    });
+  }
+
+  await sendLong(ctx, lines.join('\n'));
+}
+
+bot.command('pending', async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    return ctx.reply('⚠️ እርስዎ አስተዳዳሪ አይደሉም።');
+  }
+  await handlePendingReport(ctx);
+});
+
+bot.command('my_pending', async (ctx) => {
+  if (!storage.isRepresentativeUser(ctx.from.id, ctx.from.username)) {
+    return ctx.reply('⚠️ ይህ ትዕዛዝ ለተወካዮች ብቻ ነው።');
+  }
+  const msgs = storage.getPendingMessagesByRepChatId(ctx.chat.id);
+  if (!msgs.length) {
+    return ctx.reply('✅ በወቅቱ ምንም ያልተመለሰ መልዕክት የለም።');
+  }
+  const lines = [`⏳ የእርስዎ ያልተመለሱ መልዕክቶች — ${msgs.length}`, ''];
+  for (const m of msgs) {
+    const username = m.rep_username || ctx.from.username || 'ያልታወቀ';
+    const preview = (m.message_text || '').substring(0, 50);
+    const ellipsis = (m.message_text || '').length > 50 ? '...' : '';
+    lines.push(`• #${m.id} | 📂 ${m.department_name || m.department_id} | @${username} | ${preview}${ellipsis} | ${timeAgo(m.created_at)}`);
+  }
+  await sendLong(ctx, lines.join('\n'));
+});
+
+bot.command('report', async (ctx) => {
+  if (!isAdminUser(ctx)) {
+    return ctx.reply('⚠️ እርስዎ አስተዳዳሪ አይደሉም።');
+  }
+  await handleFullReport(ctx);
 });
 
 bot.start(async (ctx) => {
@@ -821,7 +982,8 @@ bot.start(async (ctx) => {
       "✅ እንኳን ደህና መጡ!\n\n" +
         "እርስዎ እንደ ተወካይ ተመዝግበዋል።\n\n" +
         "📩 የተማሪዎች መልዕክቶች እዚህ ይደርሳሉ።\n\n" +
-        "↩️ ለተማሪው መልስ ለመላክ በደረሰዎት መልዕክት ላይ Reply / መልስ ይጠቀሙ።",
+        "↩️ ለተማሪው መልስ ለመላክ በደረሰዎት መልዕክት ላይ Reply / መልስ ይጠቀሙ።\n\n" +
+        "📋 ያልተመለሱ መልዕክቶቼን ለማየት /my_pending ይጻፉ።",
       { reply_markup: buildReplyMenu() },
     );
   }
@@ -958,6 +1120,29 @@ bot.catch((error, ctx) => {
 bot.launch();
 console.log("🤖 DMU Gibi Gubaie Telegram Bot is running...");
 registerBotCommands().catch(console.error);
+
+setInterval(async () => {
+  const pending = storage.getPendingMessages();
+  const now = Date.now();
+  for (const msg of pending) {
+    const age = now - new Date(msg.created_at).getTime();
+    const hours = age / 3600000;
+    // Only remind once: between 24-25 hours old (1-hour window to avoid repeat)
+    if (hours >= 24 && hours < 25 && msg.rep_chat_id) {
+      try {
+        await bot.telegram.sendMessage(
+          msg.rep_chat_id,
+          `⏰ አስታዋሽ፡ የተማሪ መልዕክት #${msg.id} ከ24 ሰዓት በላይ ያልተመለሰ ሆኗል።\n\n` +
+          `📂 ክፍል፦ ${msg.department_name}\n` +
+          `💬 መልዕክት፦ ${(msg.message_text || '').substring(0, 80)}...\n\n` +
+          `↩ ለመመለስ የዚህን መልዕክት ID ያስታውሱ: #${msg.id}`
+        );
+      } catch (e) {
+        console.error('Reminder failed:', e.message);
+      }
+    }
+  }
+}, 3600000);
 
 process.once("SIGINT", () => {
   bot.stop("SIGINT");

@@ -322,6 +322,66 @@ function getStats() {
   };
 }
 
+function getPendingMessages() {
+  return db.prepare(`
+    SELECT m.*, r.username as rep_username
+    FROM messages m
+    LEFT JOIN department_representatives dr ON dr.department_id = m.department_id AND dr.chat_id = m.rep_chat_id
+    LEFT JOIN representatives r ON r.chat_id = m.rep_chat_id
+    WHERE m.reply_status = 'pending'
+    ORDER BY m.created_at ASC
+  `).all();
+}
+
+function getPendingMessagesByRepChatId(repChatId) {
+  return db.prepare(`
+    SELECT * FROM messages
+    WHERE reply_status = 'pending' AND rep_chat_id = ?
+    ORDER BY created_at ASC
+  `).all(repChatId);
+}
+
+function getDetailedStats() {
+  const total = db.prepare(`SELECT COUNT(*) AS count FROM messages`).get();
+  const answered = db.prepare(`SELECT COUNT(*) AS count FROM messages WHERE reply_status = 'answered'`).get();
+  const pending = db.prepare(`SELECT COUNT(*) AS count FROM messages WHERE reply_status = 'pending'`).get();
+
+  const byDepartment = db.prepare(`
+    SELECT department_id, department_name,
+      COUNT(*) as total,
+      SUM(CASE WHEN reply_status='pending' THEN 1 ELSE 0 END) as pending,
+      SUM(CASE WHEN reply_status='answered' THEN 1 ELSE 0 END) as answered
+    FROM messages GROUP BY department_id ORDER BY total DESC
+  `).all();
+
+  const topReps = db.prepare(`
+    SELECT r.username, COUNT(*) as answered_count
+    FROM messages m
+    JOIN representatives r ON r.chat_id = m.rep_chat_id
+    WHERE m.reply_status = 'answered'
+    GROUP BY m.rep_chat_id ORDER BY answered_count DESC LIMIT 5
+  `).all();
+
+  return {
+    total: Number(total.count),
+    pending: Number(pending.count),
+    answered: Number(answered.count),
+    byDepartment,
+    topReps,
+  };
+}
+
+function getRecentAnsweredMessages(limit = 10) {
+  return db.prepare(`
+    SELECT m.*, r.username as rep_username
+    FROM messages m
+    LEFT JOIN representatives r ON r.chat_id = m.rep_chat_id
+    WHERE m.reply_status = 'answered'
+    ORDER BY m.replied_at DESC
+    LIMIT ?
+  `).all(limit);
+}
+
 function removeDepartmentRepresentative({ departmentId, username }) {
   const normalized = normalizeUsername(username);
   return db
@@ -359,6 +419,10 @@ module.exports = {
   updateReplyStatus,
   getReplyMap,
   getStats,
+  getPendingMessages,
+  getPendingMessagesByRepChatId,
+  getDetailedStats,
+  getRecentAnsweredMessages,
   removeDepartmentRepresentative,
   getUniqueStudentChatIds,
   getRepresentativeChatIds,
