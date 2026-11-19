@@ -1083,9 +1083,18 @@ bot.on(["text", "photo", "document", "voice", "audio", "video", "video_note"], a
   // Rep inline reply flow
   if (repReplyState.has(ctx.from.id)) {
     const state = repReplyState.get(ctx.from.id);
-    repReplyState.delete(ctx.from.id);
 
-    const replyText = ctx.message.text;
+    const replyText = (ctx.message.text || ctx.message.caption || '').trim();
+
+    // Reject empty or media-only messages — restore state so rep can try again
+    if (!replyText) {
+      await ctx.reply(
+        `⚠️ ምላሽ ይስጡ ።\n\nለ #${state.questionId} መልስዎን እንደገና ይጻፉ።\n\n❌ ለመሰረዝ /cancel ይጻፉ።`
+      );
+      return;
+    }
+
+    repReplyState.delete(ctx.from.id);
 
     try {
       await ctx.telegram.sendMessage(
@@ -1093,12 +1102,13 @@ bot.on(["text", "photo", "document", "voice", "audio", "video", "video_note"], a
         `📩 ከደ/ማ/ዩ ግ/ጉባኤ የተላከ ምላሽ፦\n\n${replyText}`
       );
 
-      // Update status
       storage.updateReplyStatusById({ id: state.questionId, status: 'answered' });
 
       await ctx.reply(`✅ መልስዎ ለተማሪው ተልኳል። (መልዕክት #${state.questionId})`);
     } catch (err) {
       console.error('Inline reply failed:', err.message);
+      // Restore state so rep can retry
+      repReplyState.set(ctx.from.id, state);
       await ctx.reply('❌ መልሱን መላክ አልተቻለም። እንደገና ይሞክሩ።');
     }
     return;
