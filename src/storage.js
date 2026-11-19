@@ -54,6 +54,15 @@ db.prepare(`
   )
 `).run();
 
+// Migrate: add username and first_name columns if they don't exist yet
+const messagesCols = db.prepare("PRAGMA table_info(messages)").all().map(c => c.name);
+if (!messagesCols.includes("username")) {
+  db.prepare("ALTER TABLE messages ADD COLUMN username TEXT").run();
+}
+if (!messagesCols.includes("first_name")) {
+  db.prepare("ALTER TABLE messages ADD COLUMN first_name TEXT").run();
+}
+
 function normalizeUsername(value) {
   if (!value) return "";
   return String(value).replace(/^@/, "").trim().toLowerCase();
