@@ -447,6 +447,25 @@ async function registerBotCommands() {
       console.error(`Failed to set commands for admin chatId ${chatId}:`, err.description || err.message);
     }
   }
+
+  // Set /my_pending for all registered reps (non-admin)
+  const repChatIds = storage.getRepresentativeChatIds();
+  const repOnlyChatIds = repChatIds.filter(id => !adminChatIds.includes(id));
+  for (const chatId of repOnlyChatIds) {
+    try {
+      await bot.telegram.setMyCommands(
+        [
+          { command: 'start', description: 'Bot ጀምር' },
+          { command: 'menu', description: 'ዋና ማውጫ ክፈት' },
+          { command: 'cancel', description: 'ወቅታዊ ምርጫ ሰርዝ' },
+          { command: 'my_pending', description: 'ያልተመለሱ መልዕክቶቼ' },
+        ],
+        { scope: { type: 'chat', chat_id: chatId } }
+      );
+    } catch (err) {
+      console.error(`Failed to set commands for rep chatId ${chatId}:`, err.description || err.message);
+    }
+  }
 }
 
 bot.command("menu", async (ctx) => {
@@ -990,6 +1009,8 @@ bot.start(async (ctx) => {
 
   const registeredAsRepresentative = registerRepresentativeIfConfigured(ctx);
   if (registeredAsRepresentative) {
+    // Update this rep's command menu to show /my_pending
+    registerBotCommands().catch(e => console.error('registerBotCommands failed:', e.message));
     return ctx.reply(
       "✅ እንኳን ደህና መጡ!\n\n" +
         "እርስዎ እንደ ተወካይ ተመዝግበዋል።\n\n" +
