@@ -880,7 +880,7 @@ async function handlePendingReport(ctx) {
   await ctx.reply(`⏳ ያልተመለሱ መልዕክቶች — ${pending.length}`);
 
   for (const m of pending) {
-    const senderDisplay = m.username ? `@${m.username}` : (m.first_name || `ID: ${m.student_user_id}`);
+    const senderDisplay = m.username ? `@${m.username}` : (m.first_name ? m.first_name : `(username የለም)`);
     const msgText = m.message_text ? m.message_text : 'ሚዲያ ፋይል';
     const text =
       `⏳ #${m.id} | 📂 ${m.department_name || m.department_id}\n` +
@@ -941,7 +941,7 @@ bot.command('my_pending', async (ctx) => {
   await ctx.reply(`⏳ የእርስዎ ያልተመለሱ መልዕክቶች — ${msgs.length}`);
 
   for (const m of msgs) {
-    const senderDisplay = m.username ? `@${m.username}` : (m.first_name || `ID: ${m.student_user_id}`);
+    const senderDisplay = m.username ? `@${m.username}` : (m.first_name ? m.first_name : `(username የለም)`);
     const msgText = m.message_text ? m.message_text : 'ሚዲያ ፋይል';
     const text =
       `⏳ #${m.id} | 📂 ${m.department_name || m.department_id}\n` +
@@ -1108,10 +1108,10 @@ bot.on(["text", "photo", "document", "voice", "audio", "video", "video_note"], a
 
       await ctx.reply(`✅ መልስዎ ለተማሪው ተልኳል። (መልዕክት #${state.questionId})`);
     } catch (err) {
+
       console.error('Inline reply failed:', err.message);
-      // Restore state so rep can retry
-      repReplyState.set(ctx.from.id, state);
-      await ctx.reply('❌ መልሱን መላክ አልተቻለም። እንደገና ይሞክሩ።');
+      await ctx.reply(`❌ መልሱን መላክ አልተቻለም። ተማሪው ቦቱን አግደው ሊሆን ይችላል። (መልዕክት #``)`);
+
     }
     return;
   }
