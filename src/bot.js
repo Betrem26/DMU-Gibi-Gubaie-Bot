@@ -878,7 +878,7 @@ async function handlePendingReport(ctx) {
   await ctx.reply(`⏳ ያልተመለሱ መልዕክቶች — ${pending.length}`);
 
   for (const m of pending) {
-    const username = m.rep_username || 'ያልታወቀ';
+    const username = m.username || 'ያልታወቀ';
     const msgText = m.message_text ? m.message_text : 'ሚዲያ ፋይል';
     const text =
       `⏳ #${m.id} | 📂 ${m.department_name || m.department_id}\n` +
@@ -939,7 +939,7 @@ bot.command('my_pending', async (ctx) => {
   await ctx.reply(`⏳ የእርስዎ ያልተመለሱ መልዕክቶች — ${msgs.length}`);
 
   for (const m of msgs) {
-    const username = ctx.from.username || 'ያልታወቀ';
+    const username = m.username || 'ያልታወቀ';
     const msgText = m.message_text ? m.message_text : 'ሚዲያ ፋይል';
     const text =
       `⏳ #${m.id} | 📂 ${m.department_name || m.department_id}\n` +
