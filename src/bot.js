@@ -602,7 +602,7 @@ bot.command('assign_rep', async (ctx) => {
 
   // Mode A — no args: /assign_rep
   adminAssignState.set(ctx.from.id, { step: 'waiting_username', action: 'assign' });
-  return ctx.reply('👤 ተወካዩን ስም ያስገቡ (@ ሳያስፈልግ)፡');
+  return ctx.reply('👤 ተወካይ ሊያደርጉት የፈለጉትን የግቢ ጉባኤ አባል የቴሌግራም username ያስገቡ (@ ሳያስፈልግ)፡');
 });
 
 bot.command("list_departments", async (ctx) => {
