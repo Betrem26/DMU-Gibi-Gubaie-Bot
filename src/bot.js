@@ -360,6 +360,8 @@ async function handleStudentSubmission(ctx) {
       storage.recordForwardedMessage({
         studentChatId: ctx.chat.id,
         studentUserId: senderId,
+        username: ctx.from.username || null,
+        firstName: ctx.from.first_name || null,
         departmentId: selectedDepartment.id,
         departmentName: selectedDepartment.name,
         subDepartmentId: selectedDepartment.id,
@@ -878,11 +880,11 @@ async function handlePendingReport(ctx) {
   await ctx.reply(`⏳ ያልተመለሱ መልዕክቶች — ${pending.length}`);
 
   for (const m of pending) {
-    const username = m.username || 'ያልታወቀ';
+    const senderDisplay = m.username ? `@${m.username}` : (m.first_name || `ID: ${m.student_user_id}`);
     const msgText = m.message_text ? m.message_text : 'ሚዲያ ፋይል';
     const text =
       `⏳ #${m.id} | 📂 ${m.department_name || m.department_id}\n` +
-      `👤 @${username}\n` +
+      `👤 ${senderDisplay}\n` +
       `💬 ${msgText}\n` +
       `🕐 ${timeAgo(m.created_at)}`;
     await ctx.reply(
@@ -939,11 +941,11 @@ bot.command('my_pending', async (ctx) => {
   await ctx.reply(`⏳ የእርስዎ ያልተመለሱ መልዕክቶች — ${msgs.length}`);
 
   for (const m of msgs) {
-    const username = m.username || 'ያልታወቀ';
+    const senderDisplay = m.username ? `@${m.username}` : (m.first_name || `ID: ${m.student_user_id}`);
     const msgText = m.message_text ? m.message_text : 'ሚዲያ ፋይል';
     const text =
       `⏳ #${m.id} | 📂 ${m.department_name || m.department_id}\n` +
-      `👤 @${username}\n` +
+      `👤 ${senderDisplay}\n` +
       `💬 ${msgText}\n` +
       `🕐 ${timeAgo(m.created_at)}`;
     await ctx.reply(

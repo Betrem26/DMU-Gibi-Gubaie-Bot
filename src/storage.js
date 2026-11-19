@@ -188,6 +188,8 @@ function getRegisteredDepartments() {
 function recordForwardedMessage({
   studentChatId,
   studentUserId,
+  username,
+  firstName,
   departmentId,
   departmentName,
   subDepartmentId,
@@ -203,6 +205,8 @@ function recordForwardedMessage({
       INSERT INTO messages (
         student_chat_id,
         student_user_id,
+        username,
+        first_name,
         department_id,
         department_name,
         sub_department_id,
@@ -216,6 +220,8 @@ function recordForwardedMessage({
       ) VALUES (
         @studentChatId,
         @studentUserId,
+        @username,
+        @firstName,
         @departmentId,
         @departmentName,
         @subDepartmentId,
@@ -231,6 +237,8 @@ function recordForwardedMessage({
     .run({
       studentChatId,
       studentUserId,
+      username: username || null,
+      firstName: firstName || null,
       departmentId,
       departmentName,
       subDepartmentId,
