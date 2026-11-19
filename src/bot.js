@@ -1110,7 +1110,7 @@ bot.on(["text", "photo", "document", "voice", "audio", "video", "video_note"], a
     } catch (err) {
 
       console.error('Inline reply failed:', err.message);
-      await ctx.reply(`❌ መልሱን መላክ አልተቻለም። ተማሪው ቦቱን አግደው ሊሆን ይችላል። (መልዕክት #``)`);
+      await ctx.reply('❌ መልሱን መላክ አልተቻለም። ተማሪው ቦቱን አግደው ሊሆን ይችላል። (መልዕክት #' + state.questionId + ')');
 
     }
     return;
