@@ -311,7 +311,6 @@ async function handleStudentSubmission(ctx) {
     senderId,
     messageType,
     messageText: textContent,
-    anonymous,
   });
 
   let sentCount = 0;
