@@ -399,6 +399,11 @@ async function handleStudentSubmission(ctx) {
 }
 
 async function registerBotCommands() {
+  // Clear any previously cached command lists for default scope
+  try {
+    await bot.telegram.deleteMyCommands({ scope: { type: 'default' } });
+  } catch (e) { /* ignore */ }
+
   await bot.telegram.setMyCommands(
     [
       { command: 'start', description: 'Bot ጀምር' },
